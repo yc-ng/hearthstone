@@ -1,8 +1,0 @@
-"0","# IDs of missing cards (using dbfId)"
-"0","missing_cards <- cards_used[!cards_used %in% cards_simple$dbfId]"
-"0","# how many cards are not found in the collectible cards dataset?"
-"0","length(missing_cards)"
-"1","[1]"
-"1"," 15"
-"1","
-"

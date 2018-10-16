@@ -1,5 +1,0 @@
-"0","pop_cards_all <- ranked_deck_cards %>% "
-"0","    group_by(card_id) %>% "
-"0","    summarise(n_decks = n(),"
-"0","              pct_all = n_decks * 100 / nrow(rs_decks_all)) %>% "
-"0","    inner_join(cards_simple, by = c(""card_id"" = ""dbfId""))"

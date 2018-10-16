@@ -1,3 +1,0 @@
-"0","fct_cols_attr <- c(""deck_archetype"", ""deck_class"", ""deck_format"", ""deck_set"", ""deck_type"")"
-"0","decks_attr[fct_cols_attr] <- lapply(decks_attr[fct_cols_attr], factor)"
-"0","rm(fct_cols_attr)"

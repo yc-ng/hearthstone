@@ -1,5 +1,0 @@
-"0","sum(!(ranked_deck_cards$card_id) %in% cards_simple$dbfId)"
-"1","[1]"
-"1"," 61269"
-"1","
-"

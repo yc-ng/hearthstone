@@ -1,3 +1,0 @@
-"0","cards_simple <- select(cards_raw,"
-"0","                       dbfId,  name, cost,   cardClass, "
-"0","                       rarity, type,  set, collectible, id)"

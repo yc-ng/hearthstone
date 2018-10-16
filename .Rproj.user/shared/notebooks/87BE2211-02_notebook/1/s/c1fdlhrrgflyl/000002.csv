@@ -1,3 +1,0 @@
-"0","rs_decks_class <- rs_decks_all %>% "
-"0","    group_by(deck_class) %>% "
-"0","    summarise(tot_decks_class = n())"
