@@ -1,0 +1,4 @@
+"0","# create set of ranked standard decks for pct calculation"
+"0","rs_decks_all <- decks_attr %>% "
+"0","    filter(deck_type == ""Ranked Deck"","
+"0","           deck_format == ""S"")"

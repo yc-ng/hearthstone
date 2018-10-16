@@ -1,0 +1,5 @@
+"0","pop_cards_class <- pop_cards_all %>% "
+"0","    filter(!is.na(cardClass), cardClass != ""Neutral"") %>% "
+"0","    select(cardClass, name, rarity, card_set, n_decks) %>% "
+"0","    inner_join(rs_decks_class, by = c(""cardClass"" = ""deck_class"")) %>% "
+"0","    mutate(pct_class = n_decks * 100 / tot_decks_class)"

@@ -1,0 +1,3 @@
+"0","fct_cols_cards <- c(""cardClass"", ""rarity"", ""type"", ""card_set"")"
+"0","cards_simple[fct_cols_cards] <- lapply(cards_simple[fct_cols_cards], factor)"
+"0","rm(fct_cols_cards)"

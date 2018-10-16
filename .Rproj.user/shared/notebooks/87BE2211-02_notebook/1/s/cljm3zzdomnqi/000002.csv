@@ -1,0 +1,1 @@
+"0","decks_attr$deck_format[decks_attr$date < as.Date(""2016-04-26"")] <- ""S"""

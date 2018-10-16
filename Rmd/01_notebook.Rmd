@@ -1,0 +1,776 @@
+---
+title: "Hearthstone Decks (on Hearthpwn)"
+output: 
+  html_document: 
+    toc: yes
+---
+
+## 0. Questions to address
+
+1. Which are the most popular cards used in Ranked/ladder decks? 
+2. Are there any cards that are not used in Ranked decks?
+
+### Approach and Considerations
+
+* Group by expansion and class
+* Only consider decks used in certain modes (Ranked, Tournament, Arena)
+* Dataset contains decks built in beta (before game launch)
+
+## 1.1 Setup
+
+Any packages that are needed for data analysis
+
+```{r libraries, message=FALSE}
+library(dplyr)
+library(ggplot2)
+library(jsonlite)
+library(readr)
+library(stringr)
+library(tidyr)
+library(zoo)
+```
+
+
+## 1.2 Loading the data
+
+```{r message=FALSE}
+hsdecks <- read_csv("data.csv")
+hscards <- fromJSON("refs.json")
+```
+
+## 2.1 Examining the hsdecks dataset
+
+Size of the dataset and column names
+
+```{r}
+dim(hsdecks)
+
+names(hsdecks)
+```
+
+Overview of columns and data types
+
+```{r}
+glimpse(hsdecks)
+```
+
+Are there any rows containing missing data?
+
+```{r}
+sum(!complete.cases(hsdecks))
+```
+
+Missing data only in column 10, which is the `title` column. They can be ignored.
+
+```{r}
+which(is.na(hsdecks), arr.ind = TRUE)
+```
+
+
+## 2.2 Pre-processing: decks
+
+Split the dataset into two: one contains the deck attributes, the other contains the cards used in each deck (composition)
+
+```{r}
+deck_attr <- select(hsdecks, craft_cost:user)
+
+deck_comp <- select(hsdecks, deck_id, card_0:card_29)
+```
+
+Defining factor columns
+
+```{r}
+fct_cols <- c("deck_archetype", "deck_class", "deck_format", "deck_set", "deck_type")
+
+deck_attr[fct_cols] <- lapply(deck_attr[fct_cols], factor)
+```
+
+Defining additional variables
+
+```{r additional vars}
+# distinct colors for each class
+class_colors <- c(
+    "Druid" = "#FF7D0A",
+    "Hunter" = "#ABD473",
+    "Mage" = "#40C7EB",
+    "Paladin" = "#F58CBA",
+    "Priest" = "#FFFFFF",
+    "Rogue" = "#FFF569",
+    "Shaman" = "#0070DE",
+    "Warlock" = "#8787ED",
+    "Warrior" = "#C79C6E",
+    "Neutral" = "#777777"
+)
+
+# game launch date
+launch_date = as.Date("2014-03-11")
+
+# card sets/expansions up until Mar 2017
+releases_filt <- c("Beta Patch 4944", "Naxx Launch", "GvG Launch", "Blackrock Launch", 
+  "TGT Launch", "Explorers", "Old Gods", "Karazhan", "Gadgetzan")
+# abbreviated forms for plot annotations
+releases_abbr <- c("Launch", "Naxx", "GvG", "Blackrock", "TGT", 
+                   "Explorers", "Old Gods", "Karazhan", "Gadgetzan")
+
+# release dates of expansions as a dataframe
+releases <- deck_attr %>% 
+    filter(deck_set %in% releases_filt) %>% 
+    group_by(deck_set) %>% 
+    summarise(release = min(date)) %>%
+    ungroup() %>% 
+    mutate(deck_set = recode(deck_set, "Beta Patch 4944" = "Live")) %>% 
+    arrange(release)
+
+# release dates of expansions as a named vector
+release_dates <- releases[["release"]]
+names(release_dates) <- releases[["deck_set"]]
+```
+
+Exclude beta/pre-launch decks from this dataset
+
+```{r exclude beta}
+deck_attr <- filter(deck_attr, date >= launch_date)
+```
+
+For `deck_format`: all decks prior to the Old Gods expansion can be considered Standard.
+Two options for pre-processing:
+
+* Change all decks from 2014-03-11 to 2016-04-25 to "S" format
+* Ignore all "W" decks from 2016-04-26 onwards if looking at standard decks
+
+(First option leads to easier analyses later on since wild decks can be quickly filtered out)
+
+```{r deck format}
+deck_attr$deck_format[deck_attr$date < release_dates["Old Gods"]] <- "S"
+```
+
+Overview of pre-processed `deck_attr` dataset
+
+```{r}
+glimpse(deck_attr)
+```
+
+
+## 2.3 Data Exploration: deck_attr
+
+Quick summary of deck attributes (excluding card columns)
+
+```{r}
+summary(deck_attr)
+```
+
+Visualizing the number of decks submitted for Ranked/Ladder games on a monthly basis
+
+```{r}
+deck_attr %>% 
+    filter(deck_type == "Ranked Deck") %>% 
+    ggplot(aes(x = as.yearmon(date))) + 
+    geom_bar() +
+    scale_x_yearmon() +
+    geom_vline(xintercept = as.yearmon(release_dates), alpha = 0.2) +
+    annotate("text", label = releases_abbr, 
+             x = as.yearmon(release_dates), y = 16000,
+             hjust = 1, angle = 60) +
+    labs(title = "Ranked Decks submitted",
+         x = "Month",
+         y = "Count")
+```
+
+```{r fig.width=8}
+deck_attr %>% 
+    filter(deck_type == "Ranked Deck") %>% 
+    ggplot(aes(x = as.yearmon(date), fill = deck_format)) + 
+    geom_bar() +
+    scale_x_yearmon() +
+    geom_vline(xintercept = as.yearmon(release_dates), alpha = 0.2) +
+    annotate("text", label = releases_abbr, 
+             x = as.yearmon(release_dates), y = 16000,
+             hjust = 1, angle = 60) +
+    labs(title = "Ranked Decks in Standard and Wild formats",
+         x = "Year and Month",
+         y = "Count",
+         fill = "Format")
+```
+
+Class representation in Ranked Decks over time
+
+```{r class ranked plot}
+deck_attr %>% 
+    filter(deck_type == "Ranked Deck",
+           deck_format == "S") %>% 
+    ggplot(aes(x = as.yearmon(date), fill = deck_class)) +
+    geom_area(stat = "count", position = "fill") +
+    scale_x_yearmon() +
+    scale_y_continuous(breaks = seq(0, 1, 0.1), minor_breaks = NULL) +
+    scale_fill_manual(values = class_colors) +
+    geom_vline(xintercept = as.yearmon(release_dates), alpha = 0.2) +
+    annotate("text", label = releases_abbr, 
+             x = as.yearmon(release_dates) + 0.09, y = 1,
+             hjust = 1, angle = 90, alpha = 0.5) +
+    labs(title = "Class Representation in Ranked Decks",
+         x = "Month", y = "Proportion of Decks",
+         fill = "Class")
+```
+
+
+## 3.1 Examining the hscards dataset
+
+```{r}
+dim(hscards)
+```
+
+```{r}
+names(hscards)
+```
+ 
+Overview of columns and data types. There are two ID columns, but only `dbfId` lets us to look up the cards in the `deck_comp` dataset.
+
+Also note the following list-like columns:  
+
+* `referencedTags`
+* `mechanics`
+* `playRequirements`
+* `entourage`
+* `classes`
+
+```{r}
+glimpse(hscards)
+```
+
+Amount of missing data in every column (in the form of `NA`, not `NULL`)
+
+The list-like columns will usually return 0.
+
+`playRequirements` is a nested data frame, so the following calculation retrieves the number of NA values in the entire data frame, rather than the number of rows containing missing data (use `complete.cases()` if attempting to answer the latter query.)
+
+```{r}
+sapply(hscards, function(x) sum(is.na(x)))
+```
+
+
+## 3.2 Pre-processing: cards
+
+Consider extracting a simplified/thinner dataframe that creates less confusion when joined with the `deck_attr` dataset. We only include collectible cards (i.e. exclude generated cards/tokens)
+
+```{r}
+simple_cards <- hscards %>% 
+    # drop the nested df prior to filtering to avoid errors
+    select(-playRequirements) %>%
+    filter(collectible == TRUE) %>% 
+    select(dbfId, name, cost, cardClass, rarity, type, set, collectible)
+```
+
+The `set` column indicates which card set each cards belong to. We'll recode the relevant expansions for easier recognition:
+
+```{r}
+unique(simple_cards$set)
+```
+
+(Note: the other sets are "HERO_SKINS" = alternate heroes for classes)
+
+```{r}
+cardset_lst <- list(
+    "CORE" = "Basic",
+    "EXPERT1" = "Classic",
+    "NAXX" = "Curse of Naxxramas",
+    "GVG" = "Goblins vs Gnomes",
+    "BRM" = "Blackrock Mountain",
+    "TGT" = "The Grand Tournament",
+    "LOE" = "League of Explorers",
+    "OG" = "Whispers of the Old Gods",
+    "KARA" = "One Night in Karazhan",
+    "GANGS" = "Mean Streets of Gadgetzan",
+    "UNGORO" = "Journey to Un'Goro",
+    "HOF" = "Hall of Fame"
+)
+
+simple_cards$card_set <- recode(simple_cards$set, !!!cardset_lst,
+                                .default = "Other")
+
+# drop the set column to avoid later confusion (it remains in the  original dataset)
+simple_cards$set <- NULL
+```
+
+Resolve columns that are entirely in uppercase:
+
+```{r}
+titlecase_cols <- c("cardClass", "rarity", "type")
+simple_cards[titlecase_cols] <- lapply(simple_cards[titlecase_cols], str_to_title)
+```
+
+Define factor columns
+
+```{r}
+fct_cols2 <- c("cardClass", "rarity", "type", "card_set")
+
+simple_cards[fct_cols2] <- lapply(simple_cards[fct_cols2], factor)
+```
+
+### Mislabelled cards
+
+As the `hsdecks` data is generated by human input, and multiple cards with the same name can exist in the `hscards` data, it is recommended to check for mislabelled cards. Specifically, we are looking for the version of each card that is collectible (since all cards used in Ranked decks must be collectible).
+
+```{r missing cards 1}
+# ids of all cards used
+cards_used <- deck_comp %>% 
+    select(card_0:card_29) %>% 
+    unlist() %>%  # flatten into a vector
+    unique() %>% 
+    sort()
+
+# how many cards are not found in the (collectible) simple_cards df?
+sum(!(cards_used %in% simple_cards$dbfId))
+```
+
+Locating the missing cards
+
+```{r}
+missing_cards <- cards_used[!(cards_used %in% simple_cards$dbfId)]
+
+mcards_df <- hscards %>% 
+    select(-playRequirements) %>% 
+    filter(dbfId %in% missing_cards) %>% 
+    select(dbfId, name, cardClass, type, collectible)
+
+glimpse(mcards_df)
+```
+
+Joining to `simple_cards` by name instead of id produces a list of cards with the incorrect card Ids on the left, followed by the name and correct Ids:
+
+```{r}
+mislabelled <- mcards_df %>% 
+    select(dbfId, name) %>% 
+    # also drops uncollectible mislabelled cards (which are not in simple_cards)
+    inner_join(simple_cards, by = "name") %>% 
+    arrange(name)
+
+head(mislabelled)
+```
+
+Create a named list for recoding
+
+```{r}
+# list values are correct ids
+mislab_lst <- as.list(mislabelled$dbfId.y)
+# list names are mislabelled ids
+names(mislab_lst) <- mislabelled$dbfId.x
+```
+
+
+## 3.3 Data Exploration: simple_cards
+
+Quick summary of simplified card attributes
+
+```{r}
+summary(simple_cards)
+```
+
+Examining the mana cost distribution for class and neutral cards:
+
+```{r fig.height=8, fig.width=7.5}
+simple_cards %>% 
+    filter(!is.na(cost)) %>% # exclude cards without a cost
+    ggplot(aes(x = factor(cost), fill = cardClass)) +
+    geom_bar(color = "black") +
+    facet_wrap(~cardClass, ncol = 3, scales = "free_y") +
+    scale_fill_manual(values = class_colors, guide = FALSE) +
+    labs(title = "Mana Cost Distribution of Cards",
+         x = "Mana Cost", y = "Number of Cards")
+```
+
+## 4 Popular Cards
+
+We'll start by asking the general question:
+
+> Which are the most popular cards used in all Ranked decks, across the different expansions/card sets?
+
+There can be up to 2 copies of a free/common/rare/epic card in each deck, and up to 1 copy of a legendary card in each deck.
+
+We'll simplify this question by counting the number of decks which include at least 1 copy of the card in question.
+
+First, we pivot the `deck_comp` data to find out which cards (and number of copies) each deck uses:
+
+```{r ranked deck qty}
+ranked_qtys <- deck_attr %>%
+    # only look at Ranked decks
+    filter(deck_type == "Ranked Deck") %>% 
+    select(deck_id) %>% 
+    inner_join(deck_comp, by = "deck_id") %>% 
+    # pivot the card IDs (wide to long)
+    gather(card, card_id, card_0:card_29) %>% 
+    group_by(deck_id, card_id) %>% 
+    summarise(quantity = n()) %>% 
+    ungroup()
+ranked_qtys
+```
+
+Data validation:
+
+```{r validation}
+# only 1 and 2 should be present
+unique(ranked_qtys$quantity) 
+# there should be 0 NA values
+sum(is.na(ranked_qtys$quantity)) 
+```
+
+```{r validation 2}
+# any missing cards?
+sum(!(unique(ranked_qtys$card_id) %in% simple_cards$dbfId))
+# what are their ids?
+unique(ranked_qtys$card_id)[!(unique(ranked_qtys$card_id) %in% simple_cards$dbfId)]
+```
+
+Use the list earlier to relabel missing cards:
+
+```{r recode missing cards}
+ranked_qtys <- ranked_qtys %>% 
+    mutate(card_id = recode(card_id, !!!mislab_lst))
+```
+
+
+For each card, find out how many decks it appears in, and the percentage of all Ranked decks it appears in:
+
+```{r popularity all}
+pop_cards_all <- ranked_qtys %>% 
+    group_by(card_id) %>% 
+    summarise(n_decks = n(),
+              pct_all = n_decks * 100 / nrow(deck_attr)) %>% 
+    # look up each card from the simple_cards data
+    left_join(simple_cards, by = c("card_id" = "dbfId")) %>% 
+    ungroup()
+
+pop_cards_all %>% 
+    select(name, cardClass, type, rarity, card_set, n_decks, pct_all) %>% 
+    arrange(desc(n_decks))
+```
+NB: Cards that are in the Hall of Fame used to be in the Classic set but were subsequently removed from Standard format to improve card diversity across decks and the metagame.
+
+The most popular cards are clearly Neutral class, as they can be used by all 9 classes; class-specific cards would be less popular.
+
+Such a question is also biased towards cards from the Basic and Classic sets as they are always part of the Standard format and have been introduced when the game was launched.
+
+```{r pop_all card ids, eval=FALSE, echo=FALSE}
+pop_cards_all %>% 
+    arrange(desc(n_decks)) %>% 
+    select(card_id) %>% 
+    slice(1:5) %>% 
+    unlist()
+```
+
+![](cardimg/825.png) ![](cardimg/1721.png) ![](cardimg/2078.png) ![](cardimg/2262.png) ![](cardimg/1793.png) 
+
+
+
+### 4.2 Cards by Class
+
+> For each class, which are the most popular Class-specific cards used in all Ranked decks?
+
+```{r popularity class}
+pop_cards_class <- pop_cards_all %>% 
+    filter(!is.na(cardClass), cardClass != "Neutral") %>% 
+    group_by(cardClass) %>% 
+    mutate(class_rank = min_rank(desc(n_decks))) %>% 
+    select(cardClass, class_rank, card_id, name, type, n_decks)
+
+pop_cards_class %>% 
+    select(-card_id) %>% 
+    top_n(3, n_decks) %>% 
+    arrange(cardClass, class_rank) %>% 
+    print(n = nrow(.))
+```
+
+```{r pop_class card ids, eval=FALSE, echo=FALSE}
+pop_cards_class %>% 
+    top_n(1) %>% 
+    ungroup() %>% 
+    select(card_id) %>% 
+    unlist()
+```
+
+![](cardimg/64.png)
+![](cardimg/437.png)
+![](cardimg/662.png)
+![](cardimg/847.png)
+![](cardimg/1363.png)
+![](cardimg/904.png)
+![](cardimg/766.png)
+![](cardimg/846.png)
+![](cardimg/401.png)
+
+### 4.3 Cards by Time Period
+
+> Which are the most popular cards used in Standard Ranked decks every year?
+
+Recall that the `hsdecks` data spans about 3 years, from March 2014 to March 2017. Years in the game based on a time period that: 
+
+* Starts with the release of the first card set of each year, which usually falls around April.
+* Ends with the release of the first card set the next year (non-inclusive). 
+
+```{r}
+release_dates
+```
+
+So based on the release dates above, the years would be:
+
+* 2014-03-11 to 2015-04-01 (Live, Naxxramas, Goblin vs Gnomes)
+* 2015-04-02 to 2016-04-25 (Blackrock, Grand Tournament, League of Explorers)
+* 2016-04-26 to 2017-03-19 (Old Gods, Karazhan, Gadgetzan); aka Year of the Kraken
+    * Splits into Standard and Wild formats
+    
+```{r hsyear}
+deck_attr <- deck_attr %>% 
+    mutate(hsyear = case_when(
+        date <= as.Date("2015-04-01") ~ "2014",
+        date >= as.Date("2015-04-02") & 
+            date <= as.Date("2016-04-25") ~ "2015",
+        date >= as.Date("2016-04-25") ~ "2016"
+    ) %>% 
+        factor())
+```
+
+
+
+```{r ranked deck byyear}
+ranked_byyear <- deck_attr %>% 
+    filter(deck_type == "Ranked Deck",
+           deck_format == "S") %>% 
+    select(deck_id, hsyear) %>% 
+    inner_join(deck_comp, by = "deck_id") %>% 
+    gather(card, card_id, card_0:card_29) %>% 
+    mutate(card_id = recode(card_id, !!!mislab_lst)) %>%     
+    distinct(hsyear, deck_id, card_id)
+ranked_byyear
+```
+
+```{r validation 3, eval=FALSE, echo=FALSE}
+sum(!(unique(ranked_byyear$card_id) %in% simple_cards$dbfId))
+```
+
+
+Popular cards by year:
+
+```{r popularity year}
+pop_byyear <- ranked_byyear %>% 
+    group_by(hsyear, card_id) %>% 
+    summarise(n_decks = n()) %>% 
+    # look up each card from the simple_cards data
+    left_join(simple_cards, by = c("card_id" = "dbfId")) %>% 
+    select(hsyear, name, card_id, cardClass, type, rarity, card_set, n_decks) 
+
+pop_byyear %>% 
+    select(hsyear, name, cardClass, type, rarity, card_set, n_decks) %>% 
+    top_n(5, n_decks) %>% 
+    arrange(hsyear, desc(n_decks))
+```
+
+```{r pop_year card ids, eval=FALSE, echo=FALSE}
+pop_byyear %>%
+    arrange(hsyear, desc(n_decks)) %>% 
+    top_n(3) %>% 
+    ungroup() %>% 
+    select(hsyear, card_id, name)
+```
+
+![](cardimg/1793.png)
+![](cardimg/763.png)
+![](cardimg/778.png)
+![](cardimg/2078.png)
+![](cardimg/2064.png)
+![](cardimg/825.png)
+![](cardimg/1721.png)
+![](cardimg/2949.png)
+
+### 4.4 Cards by Month/Season
+
+Ranked Seasons lasts for a month, so popularity of cards may shift with the ranked metagame when a new season starts:
+
+```{r hsmonth}
+deck_attr <- deck_attr %>% 
+    mutate(hsmonth = as.yearmon(date))
+str(deck_attr$hsmonth)
+```
+
+```{r ranked deck bymonth}
+ranked_bymonth <- deck_attr %>% 
+    filter(deck_type == "Ranked Deck",
+           deck_format == "S") %>% 
+    select(hsmonth, deck_id, deck_class) %>% 
+    inner_join(deck_comp, by = "deck_id") %>% 
+    gather(card, card_id, card_0:card_29) %>% 
+    mutate(card_id = recode(card_id, !!!mislab_lst)) %>%     
+    distinct(hsmonth, deck_id, deck_class, card_id)
+ranked_bymonth
+```
+
+```{r validation 4}
+sum(!(unique(ranked_bymonth$card_id) %in% simple_cards$dbfId))
+```
+
+Popular cards by month
+
+```{r popularity month}
+pop_bymonth <- ranked_bymonth %>% 
+    group_by(hsmonth, deck_class, card_id) %>% 
+    summarise(n_decks = n()) %>% 
+    # look up each card from the simple_cards data
+    left_join(simple_cards, by = c("card_id" = "dbfId")) %>% 
+    ungroup() %>% 
+    select(hsmonth, deck_class, name, card_id, cardClass, type, rarity, card_set, n_decks) 
+pop_bymonth
+```
+
+```{r pop bymonth all}
+pop_bymonth %>% 
+    select(hsmonth, name, cardClass, type, card_set, n_decks) %>% 
+    group_by(hsmonth) %>% 
+    top_n(3, n_decks) %>% 
+    arrange(hsmonth, desc(n_decks))
+```
+
+```{r}
+pop_bymonth %>% 
+    select(hsmonth, deck_class, name, cardClass, type, rarity, n_decks) %>% 
+    group_by(hsmonth, deck_class) %>% 
+    top_n(3, n_decks) %>% 
+    filter(deck_class == "Druid") %>% 
+    arrange(hsmonth, desc(n_decks))
+```
+
+
+### 4.5 Cards by Set
+
+> For each set, which are the most popular neutral cards?
+
+```{r popularity set neutral}
+pop_cards_all %>% 
+    filter(cardClass == "Neutral") %>% 
+    group_by(card_set) %>% 
+    top_n(3, n_decks) %>% 
+    arrange(card_set, desc(n_decks)) %>% 
+    select(card_id, card_set, name, n_decks, type, rarity) %>% 
+    print(n = nrow(.))
+```
+
+
+```{r popularity set class}
+pop_cards_all %>% 
+    filter(cardClass != "Neutral") %>% 
+    group_by(card_set) %>% 
+    top_n(3, n_decks) %>% 
+    arrange(card_set, desc(n_decks)) %>% 
+    select(card_id, card_set, cardClass, name, n_decks, rarity) %>% 
+    print(n = nrow(.))
+```
+
+### 4.6 Multiple Criterion
+
+We can filter by year/month, deck class, set, rarity, card class
+
+Example question
+
+> For the first month of the LOE expansion (Nov 2015), which were the most popular Neutral and Shaman cards from the LOE set for Shaman Ranked decks?
+
+```{r multifilter example}
+pop_bymonth %>% 
+    filter(deck_class == "Shaman",
+           hsmonth == "2015-11",
+           card_set == "League of Explorers") %>% 
+    group_by(cardClass) %>% 
+    top_n(5, n_decks) %>% 
+    select(cardClass, name, type, rarity, n_decks, card_id) %>% 
+    arrange(cardClass, desc(n_decks))
+```
+
+![](cardimg/2901.png)
+![](cardimg/2949.png)
+![](cardimg/2948.png)
+![](cardimg/2890.png)
+![](cardimg/2888.png)
+![](cardimg/3007.png)
+
+### 4.7 Advanced questions
+
+```{r class ranked plot, echo=FALSE}
+```
+
+> What explains the shift in deck representation for August 2016 (launch of One Night in Karazhan)?
+
+```{r}
+deck_attr %>% 
+    filter(deck_type == "Ranked Deck",
+           deck_format == "S") %>% 
+    group_by(deck_class, hsmonth) %>% 
+    summarise(n_decks = n()) %>% 
+    mutate(n_prev = lag(n_decks, order_by = hsmonth),
+           delta = n_decks - n_prev) %>% 
+    filter(hsmonth == "2016-08") %>% 
+    arrange(desc(delta))
+```
+
+Hunter, Paladin and Priest had largest increase in submissions.
+
+```{r}
+pop_bymonth %>% 
+    filter(deck_class %in% c("Hunter", "Paladin", "Priest"),
+           hsmonth == "2016-08",
+           card_set == "One Night in Karazhan") %>% 
+    group_by(deck_class) %>% 
+    top_n(5, n_decks) %>% 
+    select(deck_class, name, cardClass, rarity, n_decks) %>% 
+    arrange(deck_class, desc(n_decks))
+```
+
+
+## 5 Unpopular Cards
+
+> Are there any cards that are not used in Ranked decks?
+
+```{r}
+simple_cards %>% 
+    # filter out the Un'Goro expansion, and Hero cards
+    filter(card_set != "Journey to Un\'Goro",
+           type != "Hero") %>% 
+    filter(!(dbfId %in% unique(ranked_qtys$card_id))) %>% 
+    select(dbfId, name, cardClass, type, card_set)
+```
+
+Apparently not. Then what were the least popular (Neutral) cards?
+
+```{r unpop}
+pop_cards_all %>% 
+    filter(cardClass == "Neutral") %>% 
+    arrange(n_decks) %>%
+    select(card_id, name, n_decks, rarity, type, card_set)
+```
+
+However, such a question would be biased towards newer cards since there would not be as many decks that use them. (And the results above clearly show it) A better question to ask would be:
+
+> From the Basic and Classic sets, which Neutral cards are least used in ranked decks?
+
+```{r}
+pop_cards_all %>% 
+    filter(cardClass == "Neutral",
+           card_set %in% c("Basic", "Classic")) %>% 
+    arrange(n_decks) %>% 
+    select(card_id, name, n_decks, rarity, type)
+```
+
+![](cardimg/567.png)
+![](cardimg/712.png)
+![](cardimg/765.png)
+![](cardimg/1653.png)
+![](cardimg/715.png)
+
+
+## 6 Further Work and Questions
+
+In order of timeframe (earliest first)
+
+* More granular analysis of popular cards (combining two or more categories)
+    * Class, card set, mana cost, card type
+* Notebook version 2:
+    * Pre-planned structure/flow, consistent naming, focus on questions
+* Dashboard
+* Popularity of cards by mechanics
+    * e.g. Battlecries, Deathrattles, Taunts
+* Parsing card texts

@@ -1,0 +1,6 @@
+"0","# data for all cards"
+"0","cards_all_raw <- fromJSON(file.path(data_path, ""refs.json""), flatten = TRUE)"
+"0","# filter for those missing cards only"
+"0","mssng_cards <- cards_all_raw %>% "
+"0","    select(dbfId, name, cardClass, type, collectible) %>% "
+"0","    filter(dbfId %in% missing_cards)"

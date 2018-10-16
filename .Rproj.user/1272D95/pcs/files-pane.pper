@@ -1,0 +1,9 @@
+{
+    "path" : "~/R/hearthstone",
+    "sortOrder" : [
+        {
+            "ascending" : true,
+            "columnIndex" : 2
+        }
+    ]
+}

@@ -1,0 +1,31 @@
+Which are the most popular cards used in Ranked decks?
+	Which are the most popular cards for each class?
+	Which are the most popular Neutral cards?
+	Which were the most popular cards each year?
+	Which are the most popular cards in each card set?
+How many legendary cards do Ranked decks use on average?
+	For each class?
+	
+0.	Setup
+	Libraries
+1.	Introduction to topic
+	Define questions
+	Possible objectives for answering questions
+2.	Loading the datasets
+3.	Pre-processing
+	Which datasets to use
+	Which variables to keep
+	Which variables to clean
+	Any variables to add
+4.	Data exploration
+	Summary of variables
+5.	Answering questions
+	(Minto pyramid?)
+6.	Visualizing answers?
+	Card images
+	Area plots (coloured by class/rarity)
+7.	Summary
+	Further questions
+	
+
+

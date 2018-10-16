@@ -1,0 +1,6 @@
+"0","# IDs of all cards used"
+"0","cards_used  <- decks_comp %>%"
+"0","        select(card_0:card_29) %>%"
+"0","        unlist(use.names = FALSE) %>%  # flatten into a vector"
+"0","        unique() %>%"
+"0","        sort()"

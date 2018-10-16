@@ -1,0 +1,4 @@
+"0","titlecase_cols <- c(""cardClass"", ""rarity"", ""type"")"
+"0","cards_simple[titlecase_cols] <- lapply(cards_simple[titlecase_cols], "
+"0","                                       str_to_title)"
+"0","rm(titlecase_cols)"
