@@ -741,16 +741,14 @@ pop_cards_year %>%
     mutate(name = factor(name)) %>% 
     mutate(name = factor(name, levels = rev(levels(name)))) %>% 
     
-    ggplot(aes(x = name, y = n_decks, fill = card_set)) +
+    ggplot(aes(x = name, y = n_decks)) +
     geom_bar(stat = "identity") +
-    scale_fill_brewer(palette = "Set1", direction = -1) +
     facet_wrap(vars(hsyear), ncol = 1, scales = "free_y", strip.position = "right") +
     coord_flip(expand = FALSE, ylim = c(0, max(pop_cards_year$n_decks) + 1000),
                xlim = c(0.4, 5.6)) +
     labs(title = "Most Popular Cards in Ranked Standard Decks every year (Apr-Mar)",
-         x = "", y = "No. of Decks", fill = "Card Set") +
-    theme_doc +
-    theme(legend.position = "top")
+         x = "", y = "No. of Decks") +
+    theme_doc
 ```
 
 
@@ -788,10 +786,10 @@ decks_attr %>%
            deck_type == "Ranked Deck",
            deck_format == "S") %>% 
     ggplot(aes(x = date)) +
-    geom_bar() +
-    scale_x_date(date_breaks = "1 month",
-                 date_minor_breaks = "1 week") +
-    labs(title = "Number of Decks", x = "Date", y = "")
+    geom_line(stat = "count") +
+    scale_x_date(date_breaks = "2 weeks") +
+    labs(title = "Number of Decks Submitted (Apr 26 to Jul 25)", 
+         x = "Date", y = "")
 ```
 
 
@@ -819,7 +817,7 @@ While cards from the latest card set were popular in the first week (still in Ap
 pop_cards_2016_aprjul %>% 
     select(hsmonth, name, card_set, n_decks) %>% 
     group_by(hsmonth) %>% 
-    top_n(3, n_decks) %>% 
+    top_n(5, n_decks) %>% 
     inner_join(rs_decks_2016_aprjul, by = "hsmonth") %>% 
     mutate(pct_month = n_decks * 100 / tot_decks_month) %>% 
     arrange(hsmonth, desc(n_decks)) %>% 
