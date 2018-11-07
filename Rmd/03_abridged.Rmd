@@ -2,7 +2,7 @@
 title: "Popularity of Hearthstone Cards"
 output: 
     html_document:
-      code_folding: show
+      code_folding: none
       df_print: kable
       toc: yes
       toc_float:
@@ -28,32 +28,25 @@ library(zoo)
 
 ## Introduction
 
-Hearthstone is a popular collectible card game published by Blizzard Entertainment in 2014, which is based on the Warcraft series by the same company. The goal of the game is to build a deck of 30 cards and win by defeating the opponent's or getting the opponent to concede first.
+Hearthstone is a popular collectible card game published by Blizzard Entertainment in 2014, which is based on the Warcraft series by the same company. The goal of the game is to build a deck of 30 cards and defeat the opponent who also has a deck of 30 cards.
 
-Cards can be classified according to the following categories:
+In Hearthstone, cards can be classified according to the following categories:
 
-* Class: Whether it can be used by only one, or many of the 9 classes in the game (Neutral)
-* Rarity: Free, Common, Rare, Epic, Legendary
-* Type: Minion, Spell, Weapon, Hero
-* Set: Besides the Basic and Classic sets, additional cards are added to the game during expansions; the set also determines if it is eligible for Standard format.
+* **Class**: Neutral cards can be used by all nine classes, while Class cards can only be used by the indicated class.
+* **Rarity**: How often cards can be found when opening card packs
+    * Cards are indicated as Free, Common, Rare, Epic and Legendary, ordered by increasing rarity.
+* **Type**: Different types of cards have different effects in the game:
+    * Minions are played on the game board and can attack Heroes or other minions.
+    * Spells are Class abilities that generate a variety of effects on the board.
+    * Weapons are items that Heroes can equip to attack Heroes or other minions.
+    * Heroes represent the player; the player loses when the Hero's health reaches 0.
+* **Set**: Cards are released in designated sets, which are usually based on a certain theme in the Warcraft universe.
+    * The core game consists of two sets, Basic and Classic, which are always available in the game.
+    * Expansion sets add newer cards to the game, and are released at regular intervals
 
-### Datasets Used
-
-There are three datasets:
-
-* `data.csv` contains a list of decks submitted by players to [HearthPwn](www.hearthpwn.com) from 2013 (pre-launch) to 2017,
-* `refs.json` contains detailed information about all cards (both collectible and non-collectible) up to March 2017.
-    * These files are taken from the following Kaggle webpage: [History of Hearthstone](https://www.kaggle.com/romainvincent/history-of-hearthstone/home).
-* `cards_collectible.json` contains detailed information about all the cards that are collectible in the game.
-    * This file can be obtained from [HearthstoneJSON](https://hearthstonejson.com/docs/cards.html).
-
-## Objective
-
-We attempt to answer the following question(s):
+### Approaching the question
 
 > Which are the most popular cards used in Ranked decks?
-
-### Breaking down the question
 
 **Which are the most popular cards used in Ranked decks?**
 
@@ -83,7 +76,16 @@ Historically, Blizzard has dealt with problematic cards in one of several ways:
 * [Adjust the card's mechanics](https://hearthstone.gamepedia.com/Card_changes) to weaken their power
 * Shift a card into the [Hall of Fame](https://hearthstone.gamepedia.com/Hall_of_Fame) which removes it from Standard format.
 
-## Loading the data
+## Exploring the Data
+
+We will use three datasets in this analysis:
+
+* `data.csv` contains a list of decks submitted by players to [HearthPwn](www.hearthpwn.com) from 2013 (pre-launch) to 2017.
+    * Obtained from [Kaggle: History of Hearthstone](https://www.kaggle.com/romainvincent/history-of-hearthstone/home)
+* `refs.json` contains detailed information about all cards (**collectible** and **non-collectible**) up to March 2017.
+    * Obtained from [Kaggle: History of Hearthstone](https://www.kaggle.com/romainvincent/history-of-hearthstone/home)
+* `cards_collectible.json` contains detailed information about the cards that are **collectible** in the game (up to August 2018)
+    * Obtained from [HearthstoneJSON](https://hearthstonejson.com/docs/cards.html).
 
 ```{r load data, message=FALSE}
 data_path <- file.path("..", "data")
@@ -92,30 +94,31 @@ decks_raw <- read_csv(file.path(data_path, "data.csv"))
 cards_raw <- fromJSON(file.path(data_path, "cards_collectible.json"), flatten = TRUE)
 ```
 
-### Decks data
+### The Decks data
 
-The `decks_raw` data has `r nrow(decks_raw)` rows and `r ncol(decks_raw)` columns. The first 11 columns describe the deck's attributes (like date submitted, class, deck format) while the remaining 30 columns describe the cards each deck contains (based on the card's unique ID which can be referenced from the `cards_raw` data).
+Here is a preview of the data's first few rows and columns:
 
-Detailed information on the variables can be found on the [Kaggle dataset](https://www.kaggle.com/romainvincent/history-of-hearthstone/home).
+```{r}
+head(decks_raw[1:11], 10)
+```
+
+This dataset has `r nrow(decks_raw)` rows and `r ncol(decks_raw)` columns. The columns `craft_cost` to `user` describe the deck's attributes (like date submitted, class, deck format) while the columns `card_0` to `card_29` describe the cards using their card IDs. Detailed information on the variables can be found on the [Kaggle: History of Hearthstone](https://www.kaggle.com/romainvincent/history-of-hearthstone/home).
 
 ```{r}
 names(decks_raw)
 ```
 
-```{r eval=FALSE}
-# code is not run
-glimpse(decks_raw) 
-```
 
-There are `r sum(!complete.cases(decks_raw))` rows that contain missing data. The missing values are in the 10th column, which contains the decks' `title` as submitted by the users, so they can be safely ignored.
-
-```{r}
-sum(!complete.cases(decks_raw))
-```
+There are `r sum(!complete.cases(decks_raw))` rows that contain missing data. All the missing values are in the `title` column, so they can be safely ignored.
 
 ```{r}
 which(is.na(decks_raw), arr.ind = TRUE)
 ```
+
+```{r}
+decks_raw[!complete.cases(decks_raw), 1:11]
+```
+
 
 ### Cards data
 
