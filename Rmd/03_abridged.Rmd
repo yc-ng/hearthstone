@@ -33,7 +33,7 @@ Hearthstone is a popular collectible card game published by Blizzard Entertainme
 In Hearthstone, cards can be classified according to the following categories:
 
 * **Class**: Neutral cards can be used by all nine classes, while Class cards can only be used by the indicated class.
-* **Rarity**: How often cards can be found when opening card packs
+* **Rarity**: How often cards can be found when opening card packs.
     * Cards are indicated as Free, Common, Rare, Epic and Legendary, ordered by increasing rarity.
 * **Type**: Different types of cards have different effects in the game:
     * Minions are played on the game board and can attack Heroes or other minions.
@@ -60,11 +60,14 @@ A deck can include **at most 2** copies of any card (1 for Legendary cards), thu
 
 **Possible biases to consider**
 
-Since Neutral cards can be used by multiple classes, they should be more popular than Class-specific cards.
+* Decks and cards presented in this data may **not** necessarily be used by players in the game itself. However, without the means to track actual matches being played in the game itself, we instead use the list of decks submitted by players as an **approximation** of the decks and cards often used by the playerbase.
 
-For the Wild format, cards from the older sets may be more popular simply because they have been in the game longer.
+* Since **Neutral** cards can be used by multiple classes, they should be more popular than **Class** cards.
 
-For the Standard format, cards from the Basic and Classic sets will be more popular because they do not rotate out of the format unlike expansion cards.
+* For the Wild format, cards from the older sets may be more popular simply because they have been in the game longer.
+
+* For the Standard format, cards from the **Basic** and **Classic** sets will be more popular because they do not rotate out of the format unlike expansion cards.
+
 
 ### Why address such a question?
 
@@ -76,7 +79,7 @@ Historically, Blizzard has dealt with problematic cards in one of several ways:
 * [Adjust the card's mechanics](https://hearthstone.gamepedia.com/Card_changes) to weaken their power
 * Shift a card into the [Hall of Fame](https://hearthstone.gamepedia.com/Hall_of_Fame) which removes it from Standard format.
 
-## Exploring the Data
+## Dataset Overview
 
 We will use three datasets in this analysis:
 
@@ -90,19 +93,23 @@ We will use three datasets in this analysis:
 ```{r load data, message=FALSE}
 data_path <- file.path("..", "data")
 
+# data for decks
 decks_raw <- read_csv(file.path(data_path, "data.csv"))
-cards_raw <- fromJSON(file.path(data_path, "cards_collectible.json"), flatten = TRUE)
+# data for collectible cards
+cards_raw <- tbl_df(fromJSON(file.path(data_path, "cards_collectible.json"), flatten = TRUE))
+# data for all cards
+cards_all_raw <- fromJSON(file.path(data_path, "refs.json"), flatten = TRUE)
 ```
 
-### The Decks data
+### Decks data
 
-Here is a preview of the data's first few rows and columns:
+The first few rows and columns of the raw data `decks_raw` is shown below:
 
 ```{r}
-head(decks_raw[1:11], 10)
+head(decks_raw[1:10], 6)
 ```
 
-This dataset has `r nrow(decks_raw)` rows and `r ncol(decks_raw)` columns. The columns `craft_cost` to `user` describe the deck's attributes (like date submitted, class, deck format) while the columns `card_0` to `card_29` describe the cards using their card IDs. Detailed information on the variables can be found on the [Kaggle: History of Hearthstone](https://www.kaggle.com/romainvincent/history-of-hearthstone/home).
+The `decks_raw` data has `r nrow(decks_raw)` rows and `r ncol(decks_raw)` columns. The columns `craft_cost` to `user` describe the deck's attributes (like date submitted, class, deck format) while the columns `card_0` to `card_29` describe the cards using their card IDs. Detailed information on the variables can be found on the [Kaggle: History of Hearthstone](https://www.kaggle.com/romainvincent/history-of-hearthstone/home).
 
 ```{r}
 names(decks_raw)
@@ -111,67 +118,87 @@ names(decks_raw)
 
 There are `r sum(!complete.cases(decks_raw))` rows that contain missing data. All the missing values are in the `title` column, so they can be safely ignored.
 
-```{r}
+```{r eval=FALSE}
 which(is.na(decks_raw), arr.ind = TRUE)
 ```
 
 ```{r}
-decks_raw[!complete.cases(decks_raw), 1:11]
+decks_raw[!complete.cases(decks_raw), 2:10]
 ```
 
 
-### Cards data
+### Collectible Cards data
+
+The first few rows and columns of the `cards_raw` data is shown below (some columns are shown truncated):
+
+```{r}
+col_trunc <- function(col, width, side = c("right", "left", "center"), 
+                      ellipsis = "..."){
+    if (class(col) == "character"){
+        col <- str_trunc(col, width, side, ellipsis)
+        return(col)
+    } else {
+        return(col)
+    }
+}
+
+cards_raw[1:12] %>% 
+    lapply(col_trunc, width = 10, side = "right") %>%
+    as_tibble() %>% 
+    head()
+```
+
+This dataset has `r nrow(cards_raw)` rows and `r ncol(cards_raw)` columns. The first 32 columns `artist` to `questReward` describe the characteristics of each card.
+
+
+```{r}
+names(cards_raw)[1:32]
+```
+
+Some of the characteristics, including `name`, Mana `cost`, `race`, `health` and `text`, can also been seen on the card itself. Some of the `mechanics` are also highlighted in **bold**:
+
+<img src = "../cardimg/825.png"  width="300">
+
+```{r include=FALSE, eval=FALSE}
+glimpse(cards_raw[cards_raw$dbfId == 825, 1:18])
+```
+
+The remaining columns are in fact nested under the `playRequirements` field, which specifies how certain cards can only be played in the game. These requirements are also implicitly/explicitly stated in the card text. (Column names are shown truncated)
+
+```{r}
+names(cards_raw)[33:65] %>% 
+    str_trunc(25, "left")
+```
+
+The following card, based on its text, would require certain conditions to be played (a minion on the board, that has not taken any damage):
+
+<img src = "../cardimg/180.png"  width="300">
+
+```{r include=FALSE, eval=FALSE}
+glimpse(cards_raw[cards_raw$dbfId == 180, 33:65])
+```
 
 Additional information on the variables can be found on [HearthstoneJSON](https://hearthstonejson.com/docs/cards.html).
 
-There are two identifier fields for the cards: a character/string `id` and an integer `dbfId`. The `decks_raw` dataset uses the integer IDs to reference cards used.
-
-```{r}
-dim(cards_raw)
-```
-
-```{r include=FALSE, eval=FALSE}
-names(cards_raw[1:32])
-```
-
-```{r eval=FALSE}
-# code is not run
-names(cards_raw)
-```
-
-```{r eval=FALSE}
-# code is not run
-glimpse(cards_raw)
-```
-
-The following computes the number of missing values in each field, with the exception of those that are present as lists or data frames (`mechanics`, `referencedTags`, `classes`, `entourage`) 
-
-```{r eval=FALSE}
-# code is not run
-sapply(cards_raw, function(x) sum(is.na(x)))
-```
+Each card has two unique identifiers: a character/string `id` and an **integer `dbfId`**. The integer `dbfId` is used across both the deck and card datasets, which can be joined later. 
 
 
-## Pre-processing {.tabset #mislab}
+## Pre-processing 
 
-### Decks data
+The following steps were involved in pre-processing the raw data:
 
-<!-- 
-Filter for decks submitted after game launch
-Split decks into attribute and composition(cards) data frames
-Define factor columns
-Add year and month variables for decks
-Relabel deck format
--->
+### Decks dataset
 
-The raw dataset is split into two, one containing the deck attributes and the other containing the deck composition (cards), with `deck_id` acting as the unique identifier. We also exclude decks created before launch (there were many card changes in the alpha and beta stages, making card popularity very volatile).
+* Split the raw data into an **deck attribute** table containing the decks' properties, and a **deck composition** table containing the decks' card IDs, which are joined by `deck_id`.
+* Exclude decks created before the game launch date (2014-03-11), due to the game undergoing significant changes in the testing phases.
+* Convert categorical variables from character to **factor** type.
+* Add a `hsyear` variable that categorizes deck submissions into year-long periods that determine which Hearthstone card sets are eligible for Standard format play. 
+    * These periods are not based on the calendar year, each `hsyear` begins with the release of the first expansion card set in that calendar year.
+* Add a `hsmonth` variable, based on calendar months, categorizing deck submissions into month-long Ranked Seasons. Rankings are reset at the start of each season, giving players opportunities to try out new decks and improve on their previous ranking.
+* For the `deck_format` column, relabel all decks submitted before 2016-04-26 as "Standard". 
+    * Prior to this date, all collectible cards were playable in Ranked games. From the game year 2016 onwards, the game introduced the **S**tandard format (restricted to cards from the Basic and Classic sets, and the last 2 calendar years) and the **W**ild format (all cards).
 
-The `decks_comp` data will be pivoted to long format later on, thus excluding fields that are not related to the cards will minimize the size of the dataset.
 
-```{r include=FALSE, eval=FALSE}
-# check for duplicate deck ids
-sum(duplicated(decks_raw$deck_id))
-```
 
 ```{r split deck data}
 launch_date <- as.Date("2014-03-11")
@@ -185,8 +212,6 @@ decks_comp <- decks_raw %>%
     select(deck_id, card_0:card_29)
 ```
 
-Within `decks_attr`, the factor/enumerated columns are identified and recast accordingly.
-
 ```{r decks_attr factor}
 fct_cols_attr <- c("deck_archetype", "deck_class", "deck_format", "deck_set", "deck_type")
 
@@ -194,20 +219,6 @@ decks_attr[fct_cols_attr] <- lapply(decks_attr[fct_cols_attr], factor)
 rm(fct_cols_attr)
 ```
 
-#### Years and Months
-
-While each deck has a submission `date`, we may also be interested in grouping the decks by month (which corresponds to Ranked seasons) and by year (which is marked by expansion release dates instead of calendar dates).
-
-Years in the game based on a time period that: 
-
-* Starts with the release of the first [card set](https://hearthstone.gamepedia.com/Card_set) of each year, which usually falls around April.
-* Ends with the release of the first card set the next year (non-inclusive). 
-
-So based on the release dates, the years would be:
-
-* 2014-03-11 to 2015-04-01 (Live, Naxxramas, Goblin vs Gnomes)
-* 2015-04-02 to 2016-04-25 (Blackrock, Grand Tournament, League of Explorers)
-* 2016-04-26 to 2017-03-19 (Old Gods, Karazhan, Gadgetzan)
 
 ```{r decks_attr month and year}
 # month (with year)
@@ -223,50 +234,23 @@ decks_attr$hsyear <- case_when(
         factor()
 ```
 
-#### Deck Format
 
-The Standard and Wild formats were formally introduced into the game on 2016-04-26 with the release of *Whispers of the Old Gods*; however the graphic below shows that many decks from June 2014 to April 2016 were marked as Wild. 
-
-```{r deck format plot, echo=FALSE}
-decks_attr %>% 
-    filter(deck_type == "Ranked Deck") %>% 
-    ggplot(aes(x = as.yearmon(date), fill = deck_format)) + 
-    geom_bar() +
-    scale_x_yearmon() +
-    scale_fill_discrete(labels = c("Standard", "Wild")) +
-    labs(title = "Ranked Decks in Standard and Wild formats",
-         x = "Month",
-         y = "Count",
-         fill = "Format")
-```
-
-We can simply relabel all decks created before 2016-04-26 as Standard since all cards before then are not separated by format:
-
-```{r}
+```{r relabel deck format}
 decks_attr$deck_format[decks_attr$date < as.Date("2016-04-26")] <- "S"
 ```
 
-```{r, include=FALSE, eval=FALSE}
-# re-examine data after pre-processing
-glimpse(decks_attr)
-```
-
-A summary of the processed data is shown below:
+A summary of the processed deck attribute data `decks_attr` is shown below:
 
 ```{r echo=FALSE}
 summary(decks_attr)
 ```
 
-### Cards data
-<!--
-Select core columns
-Relabel card sets
-Convert uppercase columns to titlecase
-Define factor columns
-Identify mislabelled cards; create list for re-labelling
--->
+### Cards dataset
 
-Many columns in the `cards_raw` data pertain to the card's stats, mechanics and play requirements, which is better explained by the text on the card image. So we choose to only include the columns that we consider are core properties of the card (and not sufficiently explained by the card text):
+* Select columns containing attributes that are important for the analysis: this includes the name, ID(s), class, rarity, type and card set.
+* Relabel the values in the `set` column with the actual names of the card sets.
+* Convert columns that are entirely in UPPERCASE to Title Case for readability
+* Convert categorical variables from character to **factor** type.
 
 ```{r cards_simple}
 cards_simple <- select(cards_raw,
@@ -274,15 +258,7 @@ cards_simple <- select(cards_raw,
                        rarity, type,  set, collectible, id)
 ```
 
-```{r, echo=FALSE}
-glimpse(cards_simple)
-```
-
-The `set` column contains abbreviated names or nicknames and is not necessarily informative; we create a new column that uses the actual names of the card sets:
-
-```{r}
-unique(cards_simple$set)
-```
+<!-- The `set` column contains abbreviated names or nicknames and is not necessarily informative; we create a new column that uses the actual names of the card sets: -->
 
 ```{r cards set}
 # list for recoding card sets
@@ -319,7 +295,7 @@ cards_simple$set <- NULL
 rm(cardset_lst)
 ```
 
-Some columns are entirely uppercase, which we convert to title case for readability:
+<!-- Some columns are entirely uppercase, which we convert to title case for readability: -->
 
 ```{r cards titlecase}
 titlecase_cols <- c("cardClass", "rarity", "type")
@@ -337,17 +313,34 @@ cards_simple[fct_cols_cards] <- lapply(cards_simple[fct_cols_cards], factor)
 rm(fct_cols_cards)
 ```
 
-A summary of the processed data is shown below:
+A summary of the processed collectible card data `cards_simple` is shown below:
 
 ```{r echo=FALSE}
 summary(cards_simple)
 ```
 
-### Mislabelled cards
+### Mislabelled cards 
 
-As the decks are generated by human input, and there are multiple cards with the same name, it is recommended to check for cards that have the same name but wrong ID. 
+Card IDs in the processed decks data may be incorrect, due to the following reasons:
 
-Specifically, we are looking for the version of each card that is collectible (since all cards used in Ranked decks must be collectible). This step requires loading the full card data (which contains non-collectible cards).
+* Deck submissions are generated by user input.
+* Users choose cards based on card names, not card IDs.
+* However, there are cards that share the same name, but have different IDs.
+    * Amongst each set of replicates, only one is collectible in-game.
+    
+Therefore, we would like to relabel any card IDs that point to non-collectible cards with the respective IDs that point to the collectible version with the same name.
+
+The following steps were taken:
+
+* From the table containing deck compositions (cards), we compile a list of unique IDs that appear in all the decks in our dataset.
+* Filter out the IDs that is *not* found in our collectible cards data `cards_simple`.
+* Using the raw data for all cards `cards_all_raw`, filter out the cards matching the above IDs.
+* Join this table back to the `cards_simple` data, based on same `name`s. 
+
+
+<!-- As the decks are generated by human input, and there are multiple cards with the same name, it is recommended to check for cards that have the same name but wrong ID.  -->
+
+<!-- Specifically, we are looking for the version of each card that is collectible (since all cards used in Ranked decks must be collectible). This step requires loading the full card data (which contains non-collectible cards). -->
 
 ```{r}
 # IDs of all cards used
@@ -361,22 +354,16 @@ cards_used  <- decks_comp %>%
 ```{r check missing ids}
 # IDs of missing cards (using dbfId)
 missing_cards <- cards_used[!cards_used %in% cards_simple$dbfId]
-
-# how many cards are not found in the collectible cards dataset?
-length(missing_cards)
 ```
 
 ```{r locate missing cards}
-# data for all cards
-cards_all_raw <- fromJSON(file.path(data_path, "refs.json"), flatten = TRUE)
-
 # filter for those missing cards only
 mssng_cards <- cards_all_raw %>% 
     select(dbfId, name, cardClass, type, collectible) %>% 
     filter(dbfId %in% missing_cards)
 ```
 
-To find the correct IDs, we join them by name to the `cards_simple`. The `dbfID.x` on the left would be replaced by the `dbfID.y` on the right:
+The `dbfID.x` on the left would be replaced by the `dbfID.y` on the right:
 
 ```{r}
 mislabelled <- mssng_cards %>% 
@@ -384,10 +371,10 @@ mislabelled <- mssng_cards %>%
     # also drops uncollectible mislabelled cards (which are not in simple_cards)
     inner_join(cards_simple, by = "name") %>% 
     arrange(name)
-mislabelled
+head(mislabelled)
 ```
 
-We create a named list that can be used within `recode()`:
+To facilitate relabeling, we create a list of key-values that associate each `dbfID.x` with the corresponding `dbfID.y`, which can be used in conjunction with the function `recode()` that replaces character values by name.
 
 ```{r}
 # list values are correct ids
@@ -396,21 +383,25 @@ mislab_recode <- as.list(mislabelled$dbfId.y)
 names(mislab_recode) <- mislabelled$dbfId.x
 ```
 
+```{r}
+# relabel ids in data
+decks_comp <- decks_comp %>% 
+    mutate_at(vars(starts_with("card")), recode, !!!mislab_recode)
+```
+
 ```{r clean up workspace, message=FALSE}
 # intermediate objects no longer needed
 rm(cards_used, missing_cards, cards_all_raw, mssng_cards)
 ```
 
-### Other objects
 <!--
+The following items may be used for plotting:
 class colours
 rarity colours
 release dates of card sets
 -->
 
-The following items may be used for plotting:
-
-```{r}
+```{r other objects}
 # class colours
 class_colors <- c(
     "Druid" = "#FF7D0A",
@@ -1019,3 +1010,4 @@ The major limitation of this data is that it only looks at decks submitted to a 
 
 * Examine popular combination of cards that complement each other well.
 * Examine whether the crafting cost (in dust) of decks has any relation to its popularity (rating).
+
